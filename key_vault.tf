@@ -2,14 +2,20 @@ locals {
   key_vault_name = upper("FOO-${var.application_info.app_name}-${var.application_info.environment}-KEY-${var.application_info.function}")
 }
 
-data "azurerm_client_config" "current" { }
+data "azurerm_client_config" "current" {}
+
+data "azuread_group" "kv_aad_group" {
+  display_name     = var.aad_group_names.keyvault 
+  security_enabled = true
+}
 
 resource "azurerm_key_vault" "kv" {
-  location            = azurerm_resource_group.rg.location
-  name                = local.key_vault_name
-  resource_group_name = azurerm_resource_group.rg.name
-  sku_name            = "standard"
-  tenant_id           = data.azurerm_client_config.current.tenant_id
+  location                  = azurerm_resource_group.rg.location
+  name                      = local.key_vault_name
+  resource_group_name       = azurerm_resource_group.rg.name
+  sku_name                  = "standard"
+  tenant_id                 = data.azurerm_client_config.current.tenant_id
+  enable_rbac_authorization = true
 
   lifecycle {
     precondition {
@@ -19,12 +25,20 @@ resource "azurerm_key_vault" "kv" {
   }
 }
 
+resource "azurerm_role_assignment" "kv_sp_admin" {
+  scope                 = azurerm_resource_group.rg.id
+  role_definition_name  = "Key Vault Administrator"
+  principal_id          = data.azurerm_client_config.current.object_id
+}
+
 resource "azurerm_key_vault_secret" "vm_admin_name" {
   for_each = var.virtual_machine_list
 
   name         = "${each.key}-username"
   value        = "${each.value.vm_admin_name_prefix}-${var.application_info.app_name}"
   key_vault_id = azurerm_key_vault.kv.id
+
+  depends_on = [ azurerm_role_assignment.kv_sp_admin ]
 }
 
 resource "random_password" "vm_admin_pasword" {
@@ -44,12 +58,12 @@ resource "azurerm_key_vault_secret" "vm_admin_password" {
   name         = "${each.key}-password"
   value        = random_password.vm_admin_pasword[each.key].result
   key_vault_id = azurerm_key_vault.kv.id
+
+  depends_on = [ azurerm_role_assignment.kv_sp_admin ]
 }
 
-# TODO: add RBAC for KV Owner - do we create the Group?
-# resource "azurerm_role_assignment" "example" {
-#   name               = "00000000-0000-0000-0000-000000000000"
-#   scope              = data.azurerm_subscription.primary.id
-#   role_definition_id = azurerm_role_definition.example.role_definition_resource_id
-#   principal_id       = data.azurerm_client_config.example.object_id
-# }
+resource "azurerm_role_assignment" "kv_aad_group" {
+  scope                 = azurerm_resource_group.rg.id
+  role_definition_name  = "Key Vault Administrator"
+  principal_id          = data.azuread_group.kv_aad_group.object_id
+}

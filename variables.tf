@@ -7,19 +7,31 @@ variable "application_info" {
     environment = string
     function    = string
     project     = string
-    UIC         = string
+    unit_long   = string
+    unit_short  = string
   })
   description = "Describes the various required components of the application being deployed. Used as the basis for dynamically naming resources"
 
   validation {
-    condition     = can(regex("[DTP]", var.application_info.environment)) && can(regex("^[a-zA-Z0-9]{1}$", var.application_info.project)) && can(regex("^[a-zA-Z0-9]{6}$", var.application_info.UIC))
-    error_message = "Environment accepts 'D', 'T', or 'P' only. Project must be 1 alphanumeric. UIC must be 6 alphanumerics."
+    condition     = can(regex("[DTP]", var.application_info.environment))
+    error_message = "Environment accepts 'D', 'T', or 'P' only."
   }
+}
+
+variable "availability_set_configuration" {
+  type = map(object({
+    platform_fault_domain_count  = optional(number)
+    platform_update_domain_count = optional(number)
+  }))
 }
 
 variable "backup_services" {
   type        = bool
   description = "If set to true, a recovery services vault will be deployed with associated policies for VMs & SQL DB."
+}
+
+variable "domain_join_secret" {
+  type = string
 }
 
 variable "domain_join" {
@@ -57,33 +69,42 @@ variable "storage_account" {
 
 variable "sql_database" {
   type = object({
-    database_rg_name = optional(string)
-    server_name      = optional(string)
+    database_rg_name  = optional(string)
+    elastic_pool_name = optional(string)
+    server_name       = optional(string)
   })
 }
 
 variable "virtual_machine_list" {
   type = map(object({
-    availability_set_platform_fault_domain_count  = number
-    availability_set_platform_update_domain_count = number
-    data_disk_list                                = list(object({
+    availability_set_name              = optional(string)
+    data_disk_list                     = list(object({
       size_gb              = number
       storage_account_type = string
     }))
-    function_code                                 = string
-    ip_configuration = object({
+    function_code                      = string
+    ip_configuration                   = object({
       virtual_network_resource_group = string
       virtual_network_name           = string
       subnet_name                    = string
     })
-    ordinal                                       = string
-    size                                          = string
-    source_image_publisher                        = string
-    source_image_offer                            = string
-    source_image_sku                              = string
-    source_image_version                          = string
-    vm_admin_credentials_secret_prefix            = string
-    vm_admin_name_prefix                          = string
+    mssql_vm_configuration             = optional(object({
+      r_services_enabled                                  = bool
+      sql_connectivity_port                               = number
+      sql_connectivity_type                               = string
+      sql_license_type                                    = string
+      sql_patching_day_of_week                            = string
+      sql_patching_maintenance_window_duration_in_minutes = number
+      sql_patching_maintenance_window_starting_hour       = number
+    }))
+    ordinal                            = string
+    size                               = string
+    source_image_publisher             = string
+    source_image_offer                 = string
+    source_image_sku                   = string
+    source_image_version               = string
+    vm_admin_credentials_secret_prefix = string
+    vm_admin_name_prefix               = string
   }))
 }
 
@@ -97,3 +118,11 @@ variable "web_app" {
     alert_action_group_rg_name         = optional(string)
   })
 }
+
+variable aad_group_names {
+  type = object({
+    keyvault = optional(string)
+  })
+  description = "Name of the AAD groups to assign RBAC"
+}
+
